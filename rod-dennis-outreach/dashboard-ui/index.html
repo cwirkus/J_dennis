@@ -496,7 +496,10 @@ function autoExpandTa(ta) {
 
 function toggleRewrite(id) {
   const panel = document.getElementById('drewrite-panel-' + id);
-  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (!panel) return;
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function submitRewrite(id) {
