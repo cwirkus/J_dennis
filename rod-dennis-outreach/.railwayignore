@@ -1,0 +1,8 @@
+.env
+tests/
+__pycache__/
+*.pyc
+.pytest_cache/
+dashboard-ui/src/
+data/
+*.csv

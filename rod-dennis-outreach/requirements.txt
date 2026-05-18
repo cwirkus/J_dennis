@@ -1,0 +1,15 @@
+supabase>=2.0.0
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic-settings
+anthropic
+httpx
+aiofiles
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+apscheduler
+pytest
+pytest-asyncio
