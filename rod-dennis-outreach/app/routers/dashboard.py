@@ -204,3 +204,81 @@ def discovery_log():
         .data or []
     )
     return rows
+
+
+@router.get("/all-prospects")
+def all_prospects(offset: int = 0, limit: int = 100, search: Optional[str] = None):
+    db = get_db()
+    q = (
+        db.table("prospects")
+        .select("id, name, organization, category, country, email, notes, priority, status")
+        .order("priority")
+        .order("name")
+        .range(offset, offset + limit - 1)
+    )
+    rows = q.execute().data or []
+    if search:
+        s = search.lower()
+        rows = [r for r in rows if s in (r.get("name") or "").lower() or s in (r.get("organization") or "").lower()]
+    return rows
+
+
+class DraftForProspectBody(BaseModel):
+    prospect_id: str
+
+
+@router.post("/draft-for-prospect")
+def draft_for_prospect(payload: DraftForProspectBody):
+    from app.services.research_service import research_prospect
+    from app.services.outreach_generator import generate_outreach
+
+    db = get_db()
+    prospect_id = payload.prospect_id
+
+    existing = (
+        db.table("outreach_drafts")
+        .select("*")
+        .eq("prospect_id", prospect_id)
+        .eq("status", "pending")
+        .execute()
+        .data or []
+    )
+
+    p_rows = db.table("prospects").select("*").eq("id", prospect_id).execute().data or []
+    if not p_rows:
+        raise HTTPException(status_code=404, detail="Prospect not found")
+    prospect = p_rows[0]
+
+    def _build(draft_row):
+        return {
+            "id": draft_row.get("id", ""),
+            "prospect_id": prospect_id,
+            "prospect_name": prospect.get("name", ""),
+            "organization": prospect.get("organization", ""),
+            "category": prospect.get("category", ""),
+            "country": prospect.get("country", ""),
+            "email": prospect.get("email", ""),
+            "subject": draft_row.get("subject", ""),
+            "body": draft_row.get("body", ""),
+            "notes": prospect.get("notes", ""),
+            "created_at": draft_row.get("created_at", ""),
+        }
+
+    if existing:
+        return _build(existing[0])
+
+    research = research_prospect(prospect)
+    draft_content = generate_outreach(prospect, research)
+
+    now = datetime.now(timezone.utc).isoformat()
+    result = db.table("outreach_drafts").insert({
+        "prospect_id": prospect_id,
+        "subject": draft_content.get("subject", ""),
+        "body": draft_content.get("body", ""),
+        "status": "pending",
+    }).execute()
+
+    db.table("prospects").update({"last_activity": now}).eq("id", prospect_id).execute()
+
+    draft_row = result.data[0] if result.data else {"subject": draft_content.get("subject", ""), "body": draft_content.get("body", "")}
+    return _build(draft_row)
