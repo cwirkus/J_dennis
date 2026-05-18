@@ -1217,12 +1217,12 @@ function renderStats() {
   const body = document.getElementById('detail-body');
 
   const cards = [
-    { label: 'Total Prospects',  value: s.total_prospects  ?? '—' },
-    { label: 'Emails Available', value: s.emails_available ?? '—' },
-    { label: 'Not Contacted',    value: s.not_contacted    ?? '—' },
-    { label: 'Pending Drafts',   value: s.pending_drafts   ?? '—' },
-    { label: 'Sent',             value: s.sent             ?? '—' },
-    { label: 'Approved',         value: s.approved_drafts  ?? '—' },
+    { label: 'Total Contacts',     value: s.total_prospects  ?? '—' },
+    { label: 'Have Email',         value: s.emails_available ?? '—' },
+    { label: 'Not Yet Reached',    value: s.not_contacted    ?? '—' },
+    { label: 'Drafts to Review',   value: s.pending_drafts   ?? '—' },
+    { label: 'Approved & Sent',    value: s.sent             ?? '—' },
+    { label: 'Responses Approved', value: s.approved_drafts  ?? '—' },
   ];
 
   const logRows = log.length ? log.map((r, i) => `
@@ -1296,12 +1296,24 @@ async function runStatsPipeline() {
   const limit = parseInt(document.getElementById('stats-limit').value);
   btn.disabled = true; btn.textContent = 'Generating…';
   result.textContent = ''; result.style.color = '#888';
+
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Generation timed out — try a smaller batch.')), 60000)
+  );
+
   try {
-    const data = await api('/api/v1/dashboard/run-pipeline', { method: 'POST', body: JSON.stringify({ country, limit, priority }) });
+    const data = await Promise.race([
+      api('/api/v1/dashboard/run-pipeline', { method: 'POST', body: JSON.stringify({ country, limit, priority }) }),
+      timeout,
+    ]);
     result.textContent = `${data.new_drafts} new draft${data.new_drafts !== 1 ? 's' : ''} generated — switch to Outreach tab to review`;
     result.style.color = '#6fcf97';
-  } catch (e) { result.style.color = '#e05555'; result.textContent = 'Error: ' + e.message; }
-  finally { btn.disabled = false; btn.textContent = 'Generate Drafts'; }
+  } catch (e) {
+    result.style.color = '#e05555';
+    result.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generate Drafts';
+  }
 }
 
 async function runDiscovery() {
