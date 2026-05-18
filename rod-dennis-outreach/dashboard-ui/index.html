@@ -111,10 +111,10 @@
 
     /* Context banner */
     #detail-banner { flex-shrink: 0; }
-    .ctx-banner { background: #1e1e1e; border-left: 3px solid #8a7a5a; border-bottom: 1px solid #252525; padding: 8px 14px; display: flex; align-items: flex-start; gap: 12px; }
-    .ctx-banner-text { flex: 1; font-size: 11px; color: #999; line-height: 1.55; }
-    .ctx-banner-close { background: none; border: none; color: #555; cursor: pointer; font-size: 13px; padding: 0; line-height: 1; flex-shrink: 0; font-family: inherit; margin-top: 1px; }
-    .ctx-banner-close:hover { color: #888; }
+    .ctx-banner { background: #141414; border-bottom: 1px solid #2a2a2a; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+    .ctx-banner-text { flex: 1; font-size: 13px; color: #666; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ctx-banner-close { background: none; border: none; color: #444; cursor: pointer; font-size: 13px; padding: 0; line-height: 1; flex-shrink: 0; font-family: inherit; }
+    .ctx-banner-close:hover { color: #777; }
   </style>
 </head>
 <body>
@@ -233,10 +233,10 @@ function renderSidebar() {
 
 // ── CONTEXT BANNERS ──────────────────────────────────────────────────────────
 const BANNER_TEXT = {
-  outreach: 'This is your outreach pipeline. The left column shows contacts with pending drafts and your full prospect list.<br>Click any contact to view or generate a personalized email draft in your voice.<br>Review each draft, edit if needed, then Approve — the email details appear in a copy box for you to send manually from Gmail. Nothing sends automatically.',
-  social:   'Generate LinkedIn, Twitter/X, and Instagram post drafts based on what\'s happening in your career.<br>Type a trigger event (new painting, award, exhibition) and optional context, then hit Generate.<br>Review and edit each draft, then Approve to copy and post yourself. No automated posting — ever.',
-  inbox:    'When someone reaches out — through email, Instagram, LinkedIn, or your website — paste their message here.<br>The AI drafts a response in your voice immediately. Review it, edit if needed, then Approve to copy and send from Gmail.<br>Every inquiry is logged so nothing falls through the cracks.',
-  stats:    'Your pipeline at a glance. See how many prospects are in the system, how many emails are ready to send, and what\'s been approved.<br>Use Generate More Drafts to queue up new outreach by country or priority.<br>The Discovery Agent runs every Monday at 8am and automatically finds new prospects — or run it manually here anytime.',
+  outreach: 'Review AI-drafted emails in Rod\'s voice — edit, approve, then copy and send manually from Gmail.',
+  social:   'Generate LinkedIn, Twitter/X, and Instagram drafts — approve to copy and post yourself. No automated posting.',
+  inbox:    'Paste any inbound message to get an AI-drafted response in Rod\'s voice — approve to copy and send from Gmail.',
+  stats:    'Pipeline overview — generate new outreach batches or run the discovery agent to find new prospects.',
 };
 
 function renderDetailBanner(tab) {
@@ -245,7 +245,7 @@ function renderDetailBanner(tab) {
   if (localStorage.getItem('banner_dismissed_' + tab)) { el.innerHTML = ''; return; }
   const text = BANNER_TEXT[tab];
   if (!text) { el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="ctx-banner"><span class="ctx-banner-text">${text}</span><button class="ctx-banner-close" onclick="dismissBanner('${tab}')" title="Dismiss">✕</button></div>`;
+  el.innerHTML = `<div class="ctx-banner"><span class="ctx-banner-text"><span style="color:#555;margin-right:6px;">ⓘ</span>${text}</span><button class="ctx-banner-close" onclick="dismissBanner('${tab}')" title="Dismiss">✕</button></div>`;
 }
 
 function dismissBanner(tab) {
