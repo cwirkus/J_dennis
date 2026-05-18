@@ -108,6 +108,13 @@
     #list-search { width: 100%; background: #0f0f0f; border: none; border-bottom: 1px solid #1a1a1a; padding: 10px 14px; color: #f0ede8; font-size: 12px; font-family: inherit; outline: none; }
     #list-search::placeholder { color: #333; }
     #list-body { flex: 1; overflow-y: auto; }
+
+    /* Context banner */
+    #detail-banner { flex-shrink: 0; }
+    .ctx-banner { background: #1e1e1e; border-left: 3px solid #8a7a5a; border-bottom: 1px solid #252525; padding: 8px 14px; display: flex; align-items: flex-start; gap: 12px; }
+    .ctx-banner-text { flex: 1; font-size: 11px; color: #999; line-height: 1.55; }
+    .ctx-banner-close { background: none; border: none; color: #555; cursor: pointer; font-size: 13px; padding: 0; line-height: 1; flex-shrink: 0; font-family: inherit; margin-top: 1px; }
+    .ctx-banner-close:hover { color: #888; }
   </style>
 </head>
 <body>
@@ -135,6 +142,7 @@
   <!-- RIGHT DETAIL PANEL -->
   <div id="detail-panel">
     <div id="detail-toolbar"></div>
+    <div id="detail-banner"></div>
     <div id="detail-body"></div>
   </div>
 </div>
@@ -223,10 +231,33 @@ function renderSidebar() {
   `).join('');
 }
 
+// ── CONTEXT BANNERS ──────────────────────────────────────────────────────────
+const BANNER_TEXT = {
+  outreach: 'This is your outreach pipeline. The left column shows contacts with pending drafts and your full prospect list.<br>Click any contact to view or generate a personalized email draft in your voice.<br>Review each draft, edit if needed, then Approve — the email details appear in a copy box for you to send manually from Gmail. Nothing sends automatically.',
+  social:   'Generate LinkedIn, Twitter/X, and Instagram post drafts based on what\'s happening in your career.<br>Type a trigger event (new painting, award, exhibition) and optional context, then hit Generate.<br>Review and edit each draft, then Approve to copy and post yourself. No automated posting — ever.',
+  inbox:    'When someone reaches out — through email, Instagram, LinkedIn, or your website — paste their message here.<br>The AI drafts a response in your voice immediately. Review it, edit if needed, then Approve to copy and send from Gmail.<br>Every inquiry is logged so nothing falls through the cracks.',
+  stats:    'Your pipeline at a glance. See how many prospects are in the system, how many emails are ready to send, and what\'s been approved.<br>Use Generate More Drafts to queue up new outreach by country or priority.<br>The Discovery Agent runs every Monday at 8am and automatically finds new prospects — or run it manually here anytime.',
+};
+
+function renderDetailBanner(tab) {
+  const el = document.getElementById('detail-banner');
+  if (!el) return;
+  if (localStorage.getItem('banner_dismissed_' + tab)) { el.innerHTML = ''; return; }
+  const text = BANNER_TEXT[tab];
+  if (!text) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="ctx-banner"><span class="ctx-banner-text">${text}</span><button class="ctx-banner-close" onclick="dismissBanner('${tab}')" title="Dismiss">✕</button></div>`;
+}
+
+function dismissBanner(tab) {
+  localStorage.setItem('banner_dismissed_' + tab, '1');
+  renderDetailBanner(tab);
+}
+
 // ── TAB SWITCHING ────────────────────────────────────────────────────────────
 function switchTab(tab) {
   activeTab = tab;
   renderSidebar();
+  renderDetailBanner(tab);
   document.getElementById('list-panel').style.display = tab === 'stats' ? 'none' : '';
   if (tab === 'outreach') loadOutreach();
   else if (tab === 'social') loadSocial();
