@@ -449,7 +449,7 @@ function renderDraftDetail(d, container) {
 
       <div style="margin-bottom:${hasNotes ? '10px' : '14px'};">
         <div class="field-label">Body</div>
-        <textarea id="dbody-${d.id}" class="ifield" rows="12">${esc(d.body || '')}</textarea>
+        <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow-y:auto;">${esc(d.body || '')}</textarea>
       </div>
 
       ${hasNotes ? `

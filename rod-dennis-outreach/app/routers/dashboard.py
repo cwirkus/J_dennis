@@ -47,6 +47,7 @@ def pending_outreach():
             "category": p.get("category", ""),
             "country": p.get("country", ""),
             "email": p.get("email", ""),
+            "priority": p.get("priority", 2),
             "subject": d.get("subject", ""),
             "body": d.get("body", ""),
             "notes": p.get("notes", ""),
