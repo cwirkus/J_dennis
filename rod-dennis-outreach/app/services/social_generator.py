@@ -1,3 +1,4 @@
+import re
 import httpx
 
 from app.config import settings
@@ -11,7 +12,9 @@ Post structure:
 - No hashtags in body text. Up to 5 relevant hashtags at the end on their own line
 - 150-300 words
 
-Do not mention prices. Do not be salesy. Write like a serious artist with a perspective, not a marketer. Never use exclamation marks."""
+Do not mention prices. Do not be salesy. Write like a serious artist with a perspective, not a marketer. Never use exclamation marks.
+
+Return the post text ONLY. No preamble. No 'Here is a draft' or 'Here is a LinkedIn post'. No separator lines. No labels. No explanation before or after. The first character of your response must be the first character of the post itself."""
 
 TWITTER_SYSTEM_PROMPT = """You write Twitter/X posts for J. Rodney Dennis, a classical realist painter. His voice on Twitter: Sharp. Concise. Occasionally provocative. He is staking a claim that African Americans belong in the classical tradition.
 
@@ -20,7 +23,9 @@ Rules:
 - No hashtags unless essential
 - Direct statement or a question. No fluff.
 - Write like a painter with something to say, not a brand.
-- Never use exclamation marks."""
+- Never use exclamation marks.
+
+Return the post text ONLY. No preamble. No 'Here is a draft' or 'Here is a Twitter post'. No separator lines. No labels. No explanation before or after. The first character of your response must be the first character of the post itself."""
 
 INSTAGRAM_CAPTION_SYSTEM_PROMPT = """You write Instagram captions for J. Rodney Dennis, a classical realist painter. His voice on Instagram: Visual, intimate, grounded. He is sharing the story behind the work — the process, the subject, the cultural argument.
 
@@ -31,7 +36,20 @@ Rules:
 - End with a question that invites comments
 - 3-5 hashtags at the end: always include #classicalrealism #africanamericanart #figurativepainting plus 2 relevant to the specific post
 - 100-200 words
-- Never use exclamation marks."""
+- Never use exclamation marks.
+
+Return the post text ONLY. No preamble. No 'Here is a draft' or 'Here is an Instagram caption'. No separator lines. No labels. No explanation before or after. The first character of your response must be the first character of the post itself."""
+
+
+def clean_draft(text: str) -> str:
+    """Strip any AI preamble or wrapper text from generated social content."""
+    # Remove common preamble patterns
+    text = re.sub(r'^(here is (a |an |the )?(draft |sample |suggested |)?(linkedin|twitter|instagram|social|x)[^:]*:[\s\-]*)', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'^(here[\'s]* (a |an |the )[^:]+:[\s\-]*)', '', text, flags=re.IGNORECASE)
+    # Remove leading/trailing separator lines
+    text = re.sub(r'^[\-\*\_]{2,}\s*\n', '', text)
+    text = re.sub(r'\n[\-\*\_]{2,}\s*$', '', text)
+    return text.strip()
 
 
 async def _call_claude(system: str, user_content: str, max_tokens: int) -> str:
@@ -56,11 +74,12 @@ async def _call_claude(system: str, user_content: str, max_tokens: int) -> str:
 
 async def generate_linkedin_post(trigger_event: str, context: str = "") -> str:
     try:
-        return await _call_claude(
+        text = await _call_claude(
             LINKEDIN_SYSTEM_PROMPT,
             f"Write a LinkedIn post.\nTrigger: {trigger_event}\nContext: {context}",
             600,
         )
+        return clean_draft(text)
     except Exception:
         return ""
 
@@ -71,14 +90,14 @@ async def generate_twitter_post(trigger_event: str, linkedin_post: str = "") -> 
         if linkedin_post:
             user_content += f"\nLinkedIn version for reference:\n{linkedin_post}"
 
-        text = await _call_claude(TWITTER_SYSTEM_PROMPT, user_content, 100)
+        text = clean_draft(await _call_claude(TWITTER_SYSTEM_PROMPT, user_content, 100))
 
         if len(text) > 280:
-            text = await _call_claude(
+            text = clean_draft(await _call_claude(
                 TWITTER_SYSTEM_PROMPT,
                 f"Rewrite this Twitter post to be UNDER 280 characters. Current length: {len(text)}.\nOriginal: {text}\nTrigger: {trigger_event}",
                 80,
-            )
+            ))
 
         return text[:280]
     except Exception:
@@ -87,11 +106,12 @@ async def generate_twitter_post(trigger_event: str, linkedin_post: str = "") -> 
 
 async def generate_instagram_caption(trigger_event: str, context: str = "") -> str:
     try:
-        return await _call_claude(
+        text = await _call_claude(
             INSTAGRAM_CAPTION_SYSTEM_PROMPT,
             f"Write an Instagram caption.\nTrigger: {trigger_event}\nContext: {context}",
             400,
         )
+        return clean_draft(text)
     except Exception:
         return ""
 
