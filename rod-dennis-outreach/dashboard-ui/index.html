@@ -191,6 +191,9 @@ let draftsPendingCount = 0;
 let socialDrafts = [];
 let selectedSocialDraftId = null;
 let socialNewPostMode = false;
+let approvedSocialIds = new Set();
+let socialOriginalContent = {};
+let twitterPremiumMode = {};
 
 // Inbox
 let inboxMsgs = [];
@@ -494,6 +497,17 @@ function autoExpandTa(ta) {
   ta.style.height = Math.max(300, ta.scrollHeight) + 'px';
 }
 
+function autoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function firstWords(text, n) {
+  if (!text) return '';
+  const words = text.trim().split(/\s+/);
+  return words.slice(0, n).join(' ') + (words.length > n ? '…' : '');
+}
+
 function toggleRewrite(id) {
   const panel = document.getElementById('drewrite-panel-' + id);
   if (!panel) return;
@@ -657,6 +671,9 @@ async function draftForProspect(id) {
 async function loadSocial() {
   renderSocialList('<div style="padding:20px;color:#444;">Loading…</div>');
   renderSocialDetail();
+  approvedSocialIds.clear();
+  socialOriginalContent = {};
+  twitterPremiumMode = {};
   try {
     socialDrafts = await api('/api/v1/social/pending');
   } catch (e) {
@@ -698,13 +715,15 @@ function renderSocialList(override) {
         const sel = selectedSocialDraftId === d.id;
         const plat = platLabel[d.platform] || d.platform.toUpperCase();
         const bg = platColor[d.platform] || '#1a1a1a';
+        const isApproved = approvedSocialIds.has(d.id);
+        const title = firstWords(d.content, 8);
         return `
           <div class="list-item ${sel ? 'selected' : ''}" onclick="selectSocialDraft('${escAttr(d.id)}')">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
               <span style="font-size:9px;padding:1px 5px;border-radius:2px;background:${bg};color:#aaa;letter-spacing:0.06em;">${plat}</span>
-              <span style="color:#555;font-size:10px;">${fmtDate(d.created_at)}</span>
+              ${isApproved ? '<span style="font-size:9px;color:#6fcf97;letter-spacing:0.06em;">✓</span>' : ''}
             </div>
-            <div style="color:#888;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((d.content || '').slice(0, 60))}</div>
+            <div style="color:#888;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(title)}</div>
           </div>
         `;
       }).join('')}
@@ -763,39 +782,114 @@ function renderSocialDetail() {
   const d = socialDrafts.find(x => x.id === selectedSocialDraftId);
   if (!d) { body.innerHTML = ''; return; }
 
-  const maxChars = d.platform === 'twitter' ? 280 : null;
+  const isTwitter = d.platform === 'twitter';
+  const premium = twitterPremiumMode[d.id] || false;
   const platLabel = { linkedin: 'LinkedIn', twitter: 'Twitter / X', instagram: 'Instagram' };
+  const content = d.content || '';
+  const contentLen = content.length;
+  const isApproved = approvedSocialIds.has(d.id);
+
+  if (!(d.id in socialOriginalContent)) socialOriginalContent[d.id] = content;
+
+  if (isApproved) {
+    body.innerHTML = `
+      <div style="max-width:580px;">
+        <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:10px;letter-spacing:0.12em;color:#888;text-transform:uppercase;">${esc(platLabel[d.platform] || d.platform)}</span>
+          ${d.trigger_event ? `<span style="color:#333;font-size:11px;">${esc(d.trigger_event)}</span>` : ''}
+        </div>
+        <div class="approved-box">
+          <div style="color:#6fcf97;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;">✓ Approved — copy text below and post</div>
+          <pre>${esc(content)}</pre>
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:12px;">
+          <button class="btn btn-ghost" id="soc-undo-btn-${d.id}" onclick="undoApproveSocial('${d.id}')">↩ Undo Approval</button>
+          <span id="soc-undo-status-${d.id}" style="font-size:11px;color:#888;"></span>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const overLimit = isTwitter && !premium && contentLen > 280;
+  let charColor = '#555';
+  if (isTwitter && !premium) {
+    if (contentLen > 280) charColor = '#e05555';
+    else if (contentLen >= 250) charColor = '#e09955';
+    else charColor = '#6fcf97';
+  }
+
+  const charCountHtml = isTwitter
+    ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <span id="soc-cc-${d.id}" style="font-size:11px;color:${charColor};">${contentLen} / ${premium ? '25,000' : '280'}</span>
+        ${premium ? '<span style="font-size:10px;color:#555;">Premium limit active</span>' : ''}
+       </div>`
+    : `<div style="margin-bottom:14px;"><span id="soc-cc-${d.id}" style="font-size:11px;color:#555;">${contentLen} chars</span></div>`;
+
   body.innerHTML = `
     <div style="max-width:580px;">
       <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;">
         <span style="font-size:10px;letter-spacing:0.12em;color:#888;text-transform:uppercase;">${esc(platLabel[d.platform] || d.platform)}</span>
         ${d.trigger_event ? `<span style="color:#333;font-size:11px;">${esc(d.trigger_event)}</span>` : ''}
       </div>
-      <div style="margin-bottom:8px;">
-        <textarea id="soc-text-${d.id}" rows="${d.platform === 'linkedin' ? 12 : 5}" oninput="onSocInput('${d.id}',${maxChars||'null'})"
-          class="ifield">${esc(d.content || '')}</textarea>
+      ${overLimit ? `
+        <div style="background:#3a1a1a;border:1px solid #6a2a2a;border-radius:4px;padding:10px 14px;margin-bottom:10px;font-size:12px;color:#e08080;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <span>Over 280 characters — edit before posting or upgrade to Premium (25,000 chars)</span>
+          <button class="btn btn-ghost" onclick="enableTwitterPremium('${d.id}')" style="font-size:9px;white-space:nowrap;">Use Premium limit</button>
+        </div>
+      ` : ''}
+      <div style="margin-bottom:4px;">
+        <textarea id="soc-text-${d.id}" oninput="onSocInput('${d.id}')"
+          class="ifield" style="min-height:80px;">${esc(content)}</textarea>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-        <span id="soc-cc-${d.id}" style="font-size:11px;color:#555;">${(d.content||'').length}${maxChars ? ' / '+maxChars : ' chars'}</span>
-      </div>
-      <div id="soc-actions-${d.id}" style="display:flex;gap:8px;">
+      ${charCountHtml}
+      <div id="soc-actions-${d.id}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="btn btn-approve" onclick="approveSocial('${d.id}')">Approve</button>
-        <button class="btn btn-save" onclick="saveSocial('${d.id}')">Edit &amp; Save</button>
+        <button class="btn btn-save" id="soc-save-btn-${d.id}" onclick="saveSocial('${d.id}')" style="display:none;">Save</button>
+        <span id="soc-save-status-${d.id}" style="font-size:11px;color:#6fcf97;display:none;">Saved ✓</span>
         <button class="btn btn-reject" onclick="deleteSocial('${d.id}')">Delete</button>
       </div>
-      <div id="soc-approved-${d.id}" style="display:none;margin-top:10px;font-size:11px;color:#6fcf97;letter-spacing:0.08em;">
-        Approved — copy text above and post manually
-      </div>
     </div>`;
+
+  const ta = document.getElementById(`soc-text-${d.id}`);
+  if (ta) autoResize(ta);
 }
 
-function onSocInput(id, max) {
+function onSocInput(id) {
   const ta = document.getElementById(`soc-text-${id}`);
+  if (!ta) return;
+
+  autoResize(ta);
+
   const cc = document.getElementById(`soc-cc-${id}`);
-  if (!ta || !cc) return;
-  const n = ta.value.length;
-  cc.textContent = max ? `${n} / ${max}` : `${n} chars`;
-  cc.style.color = max && n > max ? '#e05555' : '#555';
+  if (cc) {
+    const n = ta.value.length;
+    const d = socialDrafts.find(x => x.id === id);
+    const isTwitter = d && d.platform === 'twitter';
+    const premium = twitterPremiumMode[id] || false;
+    if (isTwitter) {
+      cc.textContent = `${n} / ${premium ? '25,000' : '280'}`;
+      if (!premium) {
+        if (n > 280) cc.style.color = '#e05555';
+        else if (n >= 250) cc.style.color = '#e09955';
+        else cc.style.color = '#6fcf97';
+      }
+    } else {
+      cc.textContent = `${n} chars`;
+    }
+  }
+
+  const saveBtn = document.getElementById(`soc-save-btn-${id}`);
+  const saveStatus = document.getElementById(`soc-save-status-${id}`);
+  if (saveBtn) {
+    const original = socialOriginalContent[id] ?? '';
+    saveBtn.style.display = ta.value !== original ? 'inline-block' : 'none';
+    if (saveStatus) saveStatus.style.display = 'none';
+  }
+}
+
+function enableTwitterPremium(id) {
+  twitterPremiumMode[id] = true;
+  renderSocialDetail();
 }
 
 async function generateSocial() {
@@ -826,17 +920,49 @@ async function generateSocial() {
 async function approveSocial(id) {
   try {
     await api(`/api/v1/social/${id}/approve`, { method: 'PATCH' });
-    document.getElementById('soc-actions-'+id).style.display = 'none';
-    document.getElementById('soc-approved-'+id).style.display = 'block';
-    const ta = document.getElementById('soc-text-'+id); if (ta) ta.disabled = true;
+    approvedSocialIds.add(id);
+    const draft = socialDrafts.find(d => d.id === id);
+    if (draft) draft.status = 'approved';
+    renderSocialList();
+    renderSocialDetail();
   } catch (e) { alert('Approve failed: ' + e.message); }
+}
+
+async function undoApproveSocial(id) {
+  const btn = document.getElementById(`soc-undo-btn-${id}`);
+  const status = document.getElementById(`soc-undo-status-${id}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Undoing…'; }
+  try {
+    await api(`/api/v1/social/${id}/unapprove`, { method: 'PATCH' });
+    approvedSocialIds.delete(id);
+    const draft = socialDrafts.find(d => d.id === id);
+    if (draft) draft.status = 'pending';
+    renderSocialList();
+    renderSocialDetail();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '↩ Undo Approval'; }
+    if (status) { status.style.color = '#e05555'; status.textContent = 'Error: ' + e.message; }
+  }
 }
 
 async function saveSocial(id) {
   const ta = document.getElementById('soc-text-'+id);
+  const saveBtn = document.getElementById('soc-save-btn-'+id);
+  const saveStatus = document.getElementById('soc-save-status-'+id);
   if (!ta) return;
-  try { await api(`/api/v1/social/${id}/edit`, { method: 'PATCH', body: JSON.stringify({ content: ta.value }) }); }
-  catch (e) { alert('Save failed: ' + e.message); }
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+  try {
+    await api(`/api/v1/social/${id}/edit`, { method: 'PATCH', body: JSON.stringify({ content: ta.value }) });
+    socialOriginalContent[id] = ta.value;
+    const draft = socialDrafts.find(d => d.id === id);
+    if (draft) draft.content = ta.value;
+    if (saveBtn) { saveBtn.style.display = 'none'; saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    if (saveStatus) { saveStatus.style.display = 'inline'; setTimeout(() => { if (saveStatus) saveStatus.style.display = 'none'; }, 2000); }
+    renderSocialList();
+  } catch (e) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    alert('Save failed: ' + e.message);
+  }
 }
 
 async function deleteSocial(id) {
@@ -844,6 +970,9 @@ async function deleteSocial(id) {
   try {
     await api(`/api/v1/social/${id}`, { method: 'DELETE' });
     socialDrafts = socialDrafts.filter(d => d.id !== id);
+    approvedSocialIds.delete(id);
+    delete socialOriginalContent[id];
+    delete twitterPremiumMode[id];
     selectedSocialDraftId = null;
     renderSocialList();
     renderSocialDetail();

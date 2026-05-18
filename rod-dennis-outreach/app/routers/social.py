@@ -72,6 +72,15 @@ def edit(draft_id: str, req: EditRequest):
     return csv_service.get_social_draft_by_id(draft_id)
 
 
+@router.patch("/{draft_id}/unapprove")
+def unapprove(draft_id: str):
+    draft = csv_service.get_social_draft_by_id(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    csv_service.update_social_draft(draft_id, {"status": "pending", "approved_at": ""})
+    return {"success": True}
+
+
 @router.delete("/{draft_id}")
 def delete(draft_id: str):
     deleted = csv_service.delete_social_draft(draft_id)
