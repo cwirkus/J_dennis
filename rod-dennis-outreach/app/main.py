@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import dashboard, prospects
@@ -74,12 +75,12 @@ app.include_router(social_router.router)
 app.include_router(chat_router.router)
 
 if os.path.isdir("dashboard-ui"):
-    app.mount("/dashboard-ui", StaticFiles(directory="dashboard-ui"), name="dashboard-ui")
+    app.mount("/dashboard", StaticFiles(directory="dashboard-ui", html=True), name="dashboard")
 
 
 @app.get("/")
-def root():
-    return {"status": "running", "system": "J. Rodney Dennis Art Market Outreach System"}
+async def root():
+    return RedirectResponse(url="/dashboard")
 
 
 @app.get("/health")
