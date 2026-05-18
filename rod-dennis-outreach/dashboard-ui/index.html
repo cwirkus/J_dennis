@@ -109,6 +109,13 @@
     #list-search::placeholder { color: #333; }
     #list-body { flex: 1; overflow-y: auto; }
 
+    /* Outreach split panel */
+    #list-header.outreach-split { padding: 0; border-bottom: none; background: transparent; display: flex; flex-direction: column; overflow: hidden; }
+    .drafts-panel-hdr { display: flex; align-items: center; padding: 6px 16px; font-size: 9px; letter-spacing: 0.14em; color: #3a3a3a; text-transform: uppercase; background: #0c0c0c; border-bottom: 1px solid #161616; cursor: pointer; user-select: none; flex-shrink: 0; }
+    .drafts-panel-hdr:hover { color: #555; }
+    .drafts-panel-scroll { overflow-y: auto; flex-shrink: 0; }
+    .prospects-panel-divider { display: flex; align-items: center; gap: 8px; padding: 6px 16px; font-size: 9px; letter-spacing: 0.14em; color: #3a3a3a; text-transform: uppercase; background: #0c0c0c; border-top: 1px solid #2a2a2a; border-bottom: 1px solid #161616; flex-shrink: 0; }
+
     /* Context banner */
     #detail-banner { flex-shrink: 0; }
     .ctx-banner { background: #141414; border-bottom: 1px solid #2a2a2a; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
@@ -208,6 +215,7 @@ let inboxMsgs = [];
 let selectedInboxMsgId = null;
 let inboxLogMode = false;
 let inboxPendingCount = 0;
+let draftsPanelCollapsed = false;
 
 // Stats
 let statsData = null;
@@ -292,62 +300,61 @@ function renderOutreachList(override) {
   const header = document.getElementById('list-header');
   const body = document.getElementById('list-body');
 
-  header.innerHTML = `
-    <input id="drafts-search" class="ifield" style="background:#0a0a0a;border:none;border-bottom:1px solid #1a1a1a;border-radius:0;padding:10px 14px;font-size:12px;"
-      placeholder="Search contacts…" value="${escAttr(draftsSearch)}" oninput="onDraftsSearch(this.value)" />
-  `;
-
-  if (override) { body.innerHTML = override; return; }
-
-  const q = draftsSearch.toLowerCase();
-  const filtered = pendingDrafts.filter(d =>
-    !q || (d.prospect_name || '').toLowerCase().includes(q) || (d.organization || '').toLowerCase().includes(q)
-  );
-
-  const filteredProspects = allProspects.filter(p =>
-    !prospectsSearch && (!q || (p.name || '').toLowerCase().includes(q) || (p.organization || '').toLowerCase().includes(q))
-  );
-
-  let html = '';
-
-  if (filtered.length) {
-    html += `<div class="list-section-header">Pending Drafts (${filtered.length})</div>`;
-    html += filtered.map(d => {
-      const sel = selectedDraftId === d.id;
-      const flag = countryFlag(d.country);
-      const pri = d.priority == 1 ? '<span class="badge-p1">P1</span>' : '<span class="badge-p2">P2</span>';
-      return `
-        <div class="list-item ${sel ? 'selected' : ''}" onclick="selectDraft('${escAttr(d.id)}')">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-            <span style="font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.prospect_name || '—')}</span>
-            ${pri}
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="color:#555;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.organization || '')}</span>
-            ${flag ? `<span style="font-size:13px;">${flag}</span>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('');
-  } else {
-    html += `<div class="list-section-header">Pending Drafts</div>
-      <div style="padding:14px 16px;color:#333;font-size:12px;">No pending drafts</div>`;
+  if (override) {
+    header.className = '';
+    header.innerHTML = '';
+    body.innerHTML = override;
+    return;
   }
 
-  html += `
-    <div class="list-section-header" style="margin-top:4px;">
-      All Prospects
-      <input id="prospects-search-input" style="background:transparent;border:none;border-bottom:1px solid #2a2a2a;color:#888;font-size:10px;font-family:inherit;outline:none;padding:1px 4px;margin-left:8px;width:100px;"
+  // ── Pending drafts section ──
+  const filtered = pendingDrafts.filter(d =>
+    !draftsSearch || (d.prospect_name || '').toLowerCase().includes(draftsSearch) || (d.organization || '').toLowerCase().includes(draftsSearch)
+  );
+
+  const draftItemsHtml = filtered.length ? filtered.map(d => {
+    const sel = selectedDraftId === d.id;
+    const flag = countryFlag(d.country);
+    const pri = d.priority == 1 ? '<span class="badge-p1">P1</span>' : '<span class="badge-p2">P2</span>';
+    return `
+      <div class="list-item ${sel ? 'selected' : ''}" onclick="selectDraft('${escAttr(d.id)}')">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+          <span style="font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.prospect_name || '—')}</span>
+          ${pri}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#555;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.organization || '')}</span>
+          ${flag ? `<span style="font-size:13px;">${flag}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('') : '<div style="padding:12px 16px;color:#333;font-size:12px;">No pending drafts</div>';
+
+  const scrollStyle = draftsPanelCollapsed
+    ? 'max-height:0;overflow:hidden;'
+    : 'max-height:40vh;overflow-y:auto;';
+
+  header.className = 'outreach-split';
+  header.innerHTML = `
+    <div class="drafts-panel-hdr" onclick="toggleDraftsPanel()">
+      <span style="flex:1;">Pending Drafts (${filtered.length})</span>
+      <span style="font-size:10px;">${draftsPanelCollapsed ? '▼' : '▲'}</span>
+    </div>
+    <div class="drafts-panel-scroll" style="${scrollStyle}">${draftItemsHtml}</div>
+    <div class="prospects-panel-divider">
+      <span style="flex:1;">All Prospects</span>
+      <input id="prospects-search-input"
+        style="background:transparent;border:none;border-bottom:1px solid #2a2a2a;color:#888;font-size:10px;font-family:inherit;outline:none;padding:1px 4px;width:90px;"
         placeholder="filter…" value="${escAttr(prospectsSearch)}" oninput="onProspectsSearch(this.value)" />
     </div>
   `;
 
+  // ── All prospects section ──
   const pq = prospectsSearch.toLowerCase();
   const shownProspects = allProspects.filter(p =>
     !pq || (p.name || '').toLowerCase().includes(pq) || (p.organization || '').toLowerCase().includes(pq)
   );
 
-  html += shownProspects.map(p => {
+  let prospectsHtml = shownProspects.map(p => {
     const sel = selectedProspectId === p.id && !selectedDraftId;
     const flag = countryFlag(p.country);
     const pri = p.priority == 1 ? '<span class="badge-p1">P1</span>' : '<span class="badge-p2">P2</span>';
@@ -361,19 +368,19 @@ function renderOutreachList(override) {
           <span style="color:#555;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.organization || '')}</span>
           ${flag ? `<span style="font-size:13px;">${flag}</span>` : ''}
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 
   if (prospectsHasMore && !pq) {
-    html += `<div style="padding:12px 16px;">
+    prospectsHtml += `<div style="padding:12px 16px;">
       <button class="btn btn-ghost" onclick="loadMoreProspects()" style="width:100%;">Load more</button>
     </div>`;
   }
 
-  body.innerHTML = html;
+  body.innerHTML = prospectsHtml;
 }
 
+function toggleDraftsPanel() { draftsPanelCollapsed = !draftsPanelCollapsed; renderOutreachList(); }
 function onDraftsSearch(v) { draftsSearch = v; renderOutreachList(); }
 function onProspectsSearch(v) { prospectsSearch = v; renderOutreachList(); }
 
@@ -717,6 +724,7 @@ async function loadSocial() {
 function renderSocialList(override) {
   const header = document.getElementById('list-header');
   const body = document.getElementById('list-body');
+  header.className = '';
 
   header.innerHTML = `
     <div style="padding:10px 14px;">
@@ -1030,6 +1038,7 @@ async function loadInbox() {
 function renderInboxList(override) {
   const header = document.getElementById('list-header');
   const body = document.getElementById('list-body');
+  header.className = '';
 
   header.innerHTML = `
     <div style="padding:10px 14px;">
