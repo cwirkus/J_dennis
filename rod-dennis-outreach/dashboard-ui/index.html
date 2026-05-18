@@ -435,6 +435,7 @@ async function runBatch() {
 function renderDraftDetail(d, container) {
   const hasNotes = d.notes && d.notes.trim();
   container.innerHTML = `
+
     <div style="max-width:680px;">
       <div style="margin-bottom:16px;">
         <div style="font-weight:600;font-size:16px;">${esc(d.prospect_name || '—')}</div>
@@ -449,7 +450,7 @@ function renderDraftDetail(d, container) {
 
       <div style="margin-bottom:${hasNotes ? '10px' : '14px'};">
         <div class="field-label">Body</div>
-        <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow-y:auto;">${esc(d.body || '')}</textarea>
+        <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow:hidden;">${esc(d.body || '')}</textarea>
       </div>
 
       ${hasNotes ? `
@@ -459,14 +460,84 @@ function renderDraftDetail(d, container) {
         </div>
       ` : ''}
 
-      <div id="dactions-${d.id}" style="display:flex;gap:8px;">
+      <div id="dactions-${d.id}" style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-approve" id="dapprove-${d.id}" onclick="approveDraft('${d.id}')">Approve</button>
         <button class="btn btn-save" id="dsave-${d.id}" onclick="saveDraftEdit('${d.id}')">Edit &amp; Save</button>
         <button class="btn btn-reject" onclick="rejectDraft('${d.id}')">Reject</button>
+        <button class="btn" onclick="toggleRewrite('${d.id}')" style="background:#2a1245;color:#9966cc;border:1px solid #4a2a6a;">Rewrite</button>
       </div>
+
+      <div id="drewrite-panel-${d.id}" style="display:none;margin-top:12px;padding:14px;background:#110a1a;border:1px solid #2d1a45;border-radius:4px;">
+        <div class="field-label" style="margin-bottom:6px;color:#7a5faa;">Add Rod's thoughts or direction for the rewrite (optional):</div>
+        <textarea id="drewrite-notes-${d.id}" class="ifield" rows="3"
+          placeholder="e.g. mention my Florence Academy training, reference their recent Basquiat acquisition, make it warmer, shorter, more direct..."
+          style="font-size:12px;margin-bottom:10px;"></textarea>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn" id="drewrite-btn-${d.id}" onclick="submitRewrite('${d.id}')"
+            style="background:#4a1a7a;color:#c099f0;border:1px solid #6a3aaa;">Rewrite Now</button>
+          <span id="drewrite-status-${d.id}" style="font-size:11px;color:#888;"></span>
+        </div>
+      </div>
+
       <div id="dapproved-${d.id}"></div>
     </div>
   `;
+  const bodyTa = document.getElementById(`dbody-${d.id}`);
+  if (bodyTa) {
+    autoExpandTa(bodyTa);
+    bodyTa.addEventListener('input', () => autoExpandTa(bodyTa));
+  }
+}
+
+function autoExpandTa(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.max(300, ta.scrollHeight) + 'px';
+}
+
+function toggleRewrite(id) {
+  const panel = document.getElementById('drewrite-panel-' + id);
+  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitRewrite(id) {
+  const notesEl = document.getElementById(`drewrite-notes-${id}`);
+  const notes = notesEl ? notesEl.value : '';
+  const btn = document.getElementById(`drewrite-btn-${id}`);
+  const status = document.getElementById(`drewrite-status-${id}`);
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Rewriting…';
+  status.textContent = '';
+  status.style.color = '#888';
+  try {
+    const result = await api('/api/v1/dashboard/rewrite-draft', {
+      method: 'POST',
+      body: JSON.stringify({ draft_id: id, notes }),
+    });
+    const subjectEl = document.getElementById(`dsubject-${id}`);
+    const bodyEl = document.getElementById(`dbody-${id}`);
+    if (subjectEl) subjectEl.value = result.subject;
+    if (bodyEl) { bodyEl.value = result.body; autoExpandTa(bodyEl); }
+    const draft = pendingDrafts.find(d => d.id === id);
+    if (draft) { draft.subject = result.subject; draft.body = result.body; }
+    btn.disabled = false;
+    btn.textContent = 'Rewritten ✓';
+    btn.style.background = '#1e4a35';
+    btn.style.color = '#7ecfaa';
+    btn.style.borderColor = '#2d6e4f';
+    setTimeout(() => {
+      btn.textContent = 'Rewrite Now';
+      btn.style.background = '#4a1a7a';
+      btn.style.color = '#c099f0';
+      btn.style.borderColor = '#6a3aaa';
+      const panel = document.getElementById('drewrite-panel-' + id);
+      if (panel) panel.style.display = 'none';
+    }, 2000);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Rewrite Now';
+    status.style.color = '#e05555';
+    status.textContent = 'Error: ' + e.message;
+  }
 }
 
 function toggleNotes(id) {

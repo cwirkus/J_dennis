@@ -58,7 +58,7 @@ def generate_outreach(prospect: dict, research: dict) -> dict:
     try:
         response = client.messages.create(
             model=_MODEL,
-            max_tokens=1024,
+            max_tokens=2048,
             system=ROD_VOICE_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_msg}],
         )

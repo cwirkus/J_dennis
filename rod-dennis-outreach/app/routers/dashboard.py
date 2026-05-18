@@ -224,6 +224,60 @@ def all_prospects(offset: int = 0, limit: int = 100, search: Optional[str] = Non
     return rows
 
 
+class RewriteBody(BaseModel):
+    draft_id: str
+    notes: str = ""
+
+
+@router.post("/rewrite-draft")
+def rewrite_draft(payload: RewriteBody):
+    import anthropic
+    import json
+    import os
+
+    from app.services.outreach_generator import ROD_VOICE_SYSTEM_PROMPT, _strip_fences
+
+    db = get_db()
+
+    draft_rows = db.table("outreach_drafts").select("*").eq("id", payload.draft_id).execute().data or []
+    if not draft_rows:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    draft = draft_rows[0]
+
+    prospect_rows = db.table("prospects").select("*").eq("id", draft["prospect_id"]).execute().data or []
+    prospect = prospect_rows[0] if prospect_rows else {}
+
+    user_msg = (
+        "Write an outreach email to this prospect.\n\n"
+        f"Prospect: {prospect.get('name', '')} at {prospect.get('organization', '')}, {prospect.get('country', '')}\n"
+        f"Category: {prospect.get('category', '')}\n"
+        f"Notes: {prospect.get('notes', '')}\n"
+    )
+    if payload.notes and payload.notes.strip():
+        user_msg += f"\nRod's specific direction for this rewrite: {payload.notes.strip()}\n"
+    user_msg += "\nReturn JSON only with keys: subject (str), body (str)"
+
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=ROD_VOICE_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        text = _strip_fences(response.content[0].text)
+        result = json.loads(text)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {exc}")
+
+    db.table("outreach_drafts").update({
+        "subject": result.get("subject", ""),
+        "body": result.get("body", ""),
+    }).eq("id", payload.draft_id).execute()
+
+    return {"subject": result.get("subject", ""), "body": result.get("body", "")}
+
+
 class DraftForProspectBody(BaseModel):
     prospect_id: str
 
