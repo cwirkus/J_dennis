@@ -279,11 +279,16 @@ def rewrite_draft(payload: RewriteBody):
     return {"subject": result.get("subject", ""), "body": result.get("body", "")}
 
 
+class DigestBody(BaseModel):
+    recipient_email: Optional[str] = None
+
+
 @router.post("/send-digest")
-def send_digest():
+def send_digest(payload: DigestBody = None):
     from app.services.tracking_service import send_weekly_digest
-    counts = send_weekly_digest()
-    return {"success": True, "sent_to": settings.rod_email, **counts}
+    recipient = payload.recipient_email if payload else None
+    counts = send_weekly_digest(recipient_email=recipient)
+    return {"success": True, "sent_to": recipient or settings.rod_email, **counts}
 
 
 class DraftForProspectBody(BaseModel):

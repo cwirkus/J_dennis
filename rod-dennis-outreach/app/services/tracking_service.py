@@ -7,10 +7,10 @@ from app.services import gmail_service
 _HP_CATEGORIES = {"foundation", "museum", "auction house"}
 
 
-def send_weekly_digest() -> dict:
+def send_weekly_digest(recipient_email: str = None) -> dict:
     db = get_db()
     now = datetime.now(timezone.utc)
-    week_ago = (now - timedelta(days=7)).isoformat()
+    week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
     date_str = now.strftime("%Y-%m-%d")
 
     outreach_count = (
@@ -55,9 +55,10 @@ def send_weekly_digest() -> dict:
         f"Open your dashboard to review: {settings.dashboard_url}"
     )
 
-    gmail_service.send_email(to=settings.rod_email, subject=subject, body=body)
+    to = recipient_email or settings.rod_email
+    gmail_service.send_email(to=to, subject=subject, body=body)
     print(
-        f"[tracking] weekly digest sent — outreach={outreach_count} social={social_count} "
+        f"[tracking] weekly digest sent to={to} — outreach={outreach_count} social={social_count} "
         f"inbox={inbox_count} new_prospects={new_prospects_count}"
     )
 
@@ -71,7 +72,7 @@ def send_weekly_digest() -> dict:
 
 def send_priority_nudge() -> None:
     db = get_db()
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     drafts = (
         db.table("outreach_drafts")
