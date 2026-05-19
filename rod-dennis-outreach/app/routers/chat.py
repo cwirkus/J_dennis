@@ -66,6 +66,12 @@ def get_pending():
     return rows
 
 
+@router.get("/prospect-replies")
+def get_prospect_replies():
+    rows = [r for r in csv_service.get_inbound_by_status("pending") if r.get("prospect_org")]
+    return sorted(rows, key=lambda r: r.get("created_at", ""), reverse=True)
+
+
 @router.get("/high-priority")
 def get_high_priority():
     rows = csv_service.get_inbound_by_status("pending")

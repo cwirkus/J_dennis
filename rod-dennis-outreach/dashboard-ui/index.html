@@ -219,6 +219,11 @@ let inboxLogMode = false;
 let inboxPendingCount = 0;
 let draftsPanelCollapsed = false;
 
+// Replies
+let replyMsgs = [];
+let selectedReplyId = null;
+let repliesPendingCount = 0;
+
 // Stats
 let statsData = null;
 let discoveryLog = [];
@@ -230,6 +235,7 @@ function renderSidebar() {
     { tab: 'outreach', icon: '✉', label: 'Outreach', badge: draftsPendingCount > 0 ? `<span class="nav-badge-count">${draftsPendingCount}</span>` : '' },
     { tab: 'social',   icon: '◈', label: 'Social',   badge: '' },
     { tab: 'inbox',    icon: '⌂', label: 'Inbox',    badge: inboxPendingCount > 0 ? '<span class="nav-badge-dot"></span>' : '' },
+    { tab: 'replies',  icon: '↩', label: 'Replies',  badge: repliesPendingCount > 0 ? `<span class="nav-badge-count">${repliesPendingCount}</span>` : '' },
     { tab: 'stats',    icon: '◎', label: 'Stats',    badge: '' },
   ];
   nav.innerHTML = items.map(it => `
@@ -246,6 +252,7 @@ const BANNER_TEXT = {
   outreach: 'Review AI-drafted emails in Rod\'s voice — edit, approve, then copy and send manually from Gmail.',
   social:   'Generate LinkedIn, Twitter/X, and Instagram drafts — approve to copy and post yourself. No automated posting.',
   inbox:    'Paste any inbound message to get an AI-drafted response in Rod\'s voice — approve to copy and send from Gmail.',
+  replies:  'Replies from prospects you\'ve already contacted — review the thread, edit the AI draft, then approve to send.',
   stats:    'Pipeline overview — generate new outreach batches or run the discovery agent to find new prospects.',
 };
 
@@ -272,6 +279,7 @@ function switchTab(tab) {
   if (tab === 'outreach') loadOutreach();
   else if (tab === 'social') loadSocial();
   else if (tab === 'inbox') loadInbox();
+  else if (tab === 'replies') loadReplies();
   else if (tab === 'stats') loadStats();
 }
 
@@ -1312,6 +1320,150 @@ async function submitInbound() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// REPLIES TAB
+// ═══════════════════════════════════════════════════════════════════════════
+async function loadReplies() {
+  renderRepliesList('<div style="padding:20px;color:#444;">Loading…</div>');
+  renderRepliesDetail();
+  try {
+    replyMsgs = await api('/api/v1/chat/prospect-replies');
+    repliesPendingCount = replyMsgs.length;
+    renderSidebar();
+  } catch (e) {
+    renderRepliesList(`<div style="padding:20px;color:#e05555;">Error: ${esc(e.message)}</div>`); return;
+  }
+  renderRepliesList();
+  renderRepliesDetail();
+}
+
+function renderRepliesList(override) {
+  const header = document.getElementById('list-header');
+  const body = document.getElementById('list-body');
+  header.className = '';
+  header.innerHTML = `
+    <div style="padding:10px 14px;">
+      <button class="btn btn-ghost" onclick="loadReplies()" style="width:100%;font-size:9px;">↻ Refresh</button>
+    </div>
+  `;
+  if (override) { body.innerHTML = override; return; }
+  if (!replyMsgs.length) {
+    body.innerHTML = '<div style="padding:20px;color:#333;font-size:12px;">No prospect replies yet.</div>';
+    return;
+  }
+  body.innerHTML = replyMsgs.map(m => {
+    const sel = selectedReplyId === m.id;
+    return `
+      <div class="list-item ${sel ? 'selected' : ''}" onclick="selectReply('${escAttr(m.id)}')"
+           style="${sel ? '' : 'border-left:3px solid #2a6a4a;'}">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+          <span style="font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.sender_name || '—')}</span>
+        </div>
+        <div style="color:#555;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.prospect_org || '')}</div>
+        <div style="color:#333;font-size:10px;margin-top:3px;">${fmtDate(m.created_at)}</div>
+      </div>`;
+  }).join('');
+}
+
+function selectReply(id) {
+  selectedReplyId = id;
+  renderRepliesList();
+  renderRepliesDetail();
+}
+
+function renderRepliesDetail() {
+  const toolbar = document.getElementById('detail-toolbar');
+  const body = document.getElementById('detail-body');
+  toolbar.innerHTML = '<span style="color:#333;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;">Replies</span>';
+
+  if (!selectedReplyId) {
+    body.innerHTML = replyMsgs.length
+      ? '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#2a2a2a;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;">Select a reply</div>'
+      : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#2a2a2a;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;">No prospect replies yet. Check back after outreach is sent.</div>';
+    return;
+  }
+
+  const m = replyMsgs.find(x => x.id === selectedReplyId);
+  if (!m) { body.innerHTML = ''; return; }
+
+  const blockStyle = 'padding:12px 14px;background:#111;border:1px solid #1a1a1a;border-radius:3px;font-size:13px;color:#ccc;line-height:1.65;white-space:pre-wrap;margin-bottom:14px;';
+  const labelStyle = 'font-size:10px;letter-spacing:0.1em;color:#555;text-transform:uppercase;margin-bottom:4px;';
+
+  body.innerHTML = `
+    <div style="max-width:660px;">
+      <div style="margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:15px;">${esc(m.sender_name || '—')}</div>
+          <div style="color:#888;font-size:13px;margin-top:2px;">${esc(m.prospect_org || '')}</div>
+          <div style="color:#555;font-size:11px;margin-top:2px;">${esc(m.sender_email || '')}</div>
+        </div>
+        <span style="color:#333;font-size:11px;">${fmtDate(m.created_at)}</span>
+      </div>
+
+      ${m.original_subject || m.original_body ? `
+        <div class="${labelStyle}" style="${labelStyle}">YOUR EMAIL${m.original_subject ? ' — ' + esc(m.original_subject) : ''}</div>
+        <div style="${blockStyle}color:#666;border-style:dashed;">${esc(m.original_body || m.original_subject || '')}</div>
+      ` : ''}
+
+      <div style="${labelStyle}">THEIR REPLY</div>
+      <div style="${blockStyle}">${esc(m.message || '')}</div>
+
+      <div style="margin-bottom:10px;">
+        <div style="${labelStyle}">DRAFT RESPONSE</div>
+        <textarea id="rp-resp-${m.id}" class="ifield" rows="8" style="margin-top:4px;">${esc(m.draft_response || '')}</textarea>
+      </div>
+
+      <div id="rp-actions-${m.id}" style="display:flex;gap:8px;">
+        <button class="btn btn-approve" onclick="approveReply('${escAttr(m.id)}','${escAttr(m.sender_email||'')}','${escAttr(m.original_subject||'')}')">Approve &amp; Send</button>
+        <button class="btn btn-save" onclick="saveReply('${escAttr(m.id)}')">Edit &amp; Save</button>
+        <button class="btn btn-reject" onclick="dismissReply('${escAttr(m.id)}')">Dismiss</button>
+      </div>
+      <div id="rp-status-${m.id}" style="display:none;margin-top:10px;font-size:11px;letter-spacing:0.08em;"></div>
+    </div>`;
+}
+
+async function approveReply(id, email, subject) {
+  try {
+    const r = await api(`/api/v1/chat/${id}/approve-response`, { method: 'POST' });
+    const statusEl = document.getElementById('rp-status-'+id);
+    const actionsEl = document.getElementById('rp-actions-'+id);
+    const ta = document.getElementById('rp-resp-'+id);
+    actionsEl.style.display = 'none';
+    if (ta) ta.disabled = true;
+    if (r.sent) {
+      statusEl.style.color = '#6fcf97';
+      statusEl.textContent = `Reply sent via email to ${email}`;
+    } else {
+      await navigator.clipboard.writeText(r.draft_response || '').catch(() => {});
+      statusEl.style.color = '#d4a847';
+      statusEl.textContent = 'SMTP not configured — reply copied to clipboard. Send manually from Gmail.';
+    }
+    statusEl.style.display = 'block';
+    replyMsgs = replyMsgs.filter(m => m.id !== id);
+    repliesPendingCount = replyMsgs.length;
+    renderSidebar();
+  } catch (e) { alert('Approve failed: ' + e.message); }
+}
+
+async function saveReply(id) {
+  const ta = document.getElementById('rp-resp-'+id); if (!ta) return;
+  try { await api(`/api/v1/chat/${id}/edit-response`, { method: 'PATCH', body: JSON.stringify({ draft_response: ta.value }) }); }
+  catch (e) { alert('Save failed: ' + e.message); }
+}
+
+async function dismissReply(id) {
+  if (!confirm('Dismiss this reply?')) return;
+  try {
+    await api(`/api/v1/chat/${id}`, { method: 'DELETE' });
+    replyMsgs = replyMsgs.filter(m => m.id !== id);
+    repliesPendingCount = replyMsgs.length;
+    selectedReplyId = null;
+    renderSidebar();
+    renderRepliesList();
+    renderRepliesDetail();
+  } catch (e) { alert('Dismiss failed: ' + e.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STATS TAB
 // ═══════════════════════════════════════════════════════════════════════════
 async function loadStats() {
@@ -1471,8 +1623,12 @@ async function runDiscovery() {
 // ── BADGE POLL ON BOOT ────────────────────────────────────────────────────────
 async function checkBadges() {
   try {
-    const msgs = await api('/api/v1/chat/pending');
+    const [msgs, replies] = await Promise.all([
+      api('/api/v1/chat/pending').catch(() => []),
+      api('/api/v1/chat/prospect-replies').catch(() => []),
+    ]);
     inboxPendingCount = msgs.length;
+    repliesPendingCount = replies.length;
     renderSidebar();
   } catch (_) {}
 }
