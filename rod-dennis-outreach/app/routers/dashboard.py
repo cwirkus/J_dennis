@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.config import settings
 from app.database import get_db
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -276,6 +277,13 @@ def rewrite_draft(payload: RewriteBody):
     }).eq("id", payload.draft_id).execute()
 
     return {"subject": result.get("subject", ""), "body": result.get("body", "")}
+
+
+@router.post("/send-digest")
+def send_digest():
+    from app.services.tracking_service import send_weekly_digest
+    counts = send_weekly_digest()
+    return {"success": True, "sent_to": settings.rod_email, **counts}
 
 
 class DraftForProspectBody(BaseModel):

@@ -473,6 +473,36 @@ async function runBatch() {
   }
 }
 
+function copyDraftEmail(id) {
+  const subject = (document.getElementById(`dsubject-${id}`) || {}).value || '';
+  const body = (document.getElementById(`dbody-${id}`) || {}).value || '';
+  const text = `Subject: ${subject}\n\n${body}`;
+  const btn = document.getElementById(`dcopy-${id}`);
+
+  function onCopied() {
+    if (!btn) return;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = 'Copy Email'; }, 2000);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(() => fallbackCopy(text, onCopied));
+  } else {
+    fallbackCopy(text, onCopied);
+  }
+}
+
+function fallbackCopy(text, onDone) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); onDone(); } catch (_) {}
+  document.body.removeChild(ta);
+}
+
 function renderDraftDetail(d, container) {
   const hasNotes = d.notes && d.notes.trim();
   container.innerHTML = `
@@ -505,6 +535,7 @@ function renderDraftDetail(d, container) {
         <button class="btn btn-approve" id="dapprove-${d.id}" onclick="approveDraft('${d.id}')">Approve</button>
         <button class="btn btn-save" id="dsave-${d.id}" onclick="saveDraftEdit('${d.id}')">Edit &amp; Save</button>
         <button class="btn btn-reject" onclick="rejectDraft('${d.id}')">Reject</button>
+        <button class="btn btn-primary" id="dcopy-${d.id}" onclick="copyDraftEmail('${d.id}')">Copy Email</button>
         <button class="btn" onclick="toggleRewrite('${d.id}')" style="background:#2a1245;color:#9966cc;border:1px solid #4a2a6a;">Rewrite</button>
       </div>
 

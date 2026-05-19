@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     discovery_log_path: str = "data/discovery_log.csv"
     social_drafts_path: str = "data/social_drafts.csv"
+    dashboard_url: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"

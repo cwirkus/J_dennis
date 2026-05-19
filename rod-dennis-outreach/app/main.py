@@ -12,7 +12,7 @@ from app.routers import dashboard, prospects
 from app.routers import discovery as discovery_router
 from app.routers import social as social_router
 from app.routers import chat as chat_router
-from app.services import csv_service, discovery_agent, social_generator
+from app.services import csv_service, discovery_agent, social_generator, tracking_service
 
 scheduler = AsyncIOScheduler()
 
@@ -50,6 +50,18 @@ async def lifespan(app: FastAPI):
         _weekly_social_job,
         trigger=CronTrigger(day_of_week="wed", hour=9, minute=0),
         id="weekly_social",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        tracking_service.send_weekly_digest,
+        trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
+        id="weekly_digest",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        tracking_service.send_priority_nudge,
+        trigger=CronTrigger(hour=9, minute=0),
+        id="daily_priority_nudge",
         replace_existing=True,
     )
     scheduler.start()
