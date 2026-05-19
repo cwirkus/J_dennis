@@ -555,7 +555,7 @@ function renderDraftDetail(d, container) {
         <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
           <div style="color:#444;font-size:11px;font-family:monospace;">${esc(d.email || '')}</div>
-          <button class="field-copy-btn" id="defcopy-${d.id}" title="Copy full email">${_ICON_CLIP}</button>
+          <button class="field-copy-btn" id="defcopy-${d.id}" title="Copy email address">${_ICON_CLIP}</button>
         </div>
       </div>
 
@@ -637,9 +637,7 @@ function renderDraftDetail(d, container) {
     _copy((bodyEl || {}).value || '', bcopyBtn);
   };
   if (efcopyBtn) efcopyBtn.onclick = function() {
-    var sub = (subjectEl || {}).value || '';
-    var bod = (bodyEl    || {}).value || '';
-    _copy('Subject: ' + sub + '\n\n' + bod, efcopyBtn);
+    _copy(d.email || '', efcopyBtn);
   };
 }
 
