@@ -555,8 +555,7 @@ function renderDraftDetail(d, container) {
         <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:3px;">
           <div style="color:#444;font-size:11px;font-family:monospace;">${esc(d.email || '')}</div>
-          <button class="field-copy-btn" id="defcopy-${d.id}" title="Copy full email"
-            onclick="copyFullEmail('${d.id}','defcopy-${d.id}')">${_ICON_CLIP}</button>
+          <button class="field-copy-btn" id="defcopy-${d.id}" title="Copy full email">${_ICON_CLIP}</button>
         </div>
       </div>
 
@@ -565,8 +564,7 @@ function renderDraftDetail(d, container) {
         <div style="position:relative;">
           <input id="dsubject-${d.id}" class="ifield" type="text" value="${escAttr(d.subject || '')}" style="padding-right:32px;" />
           <button class="field-copy-btn" id="dscopy-${d.id}" title="Copy subject"
-            style="position:absolute;right:6px;top:50%;transform:translateY(-50%);"
-            onclick="copyField('dsubject-${d.id}','dscopy-${d.id}')">${_ICON_CLIP}</button>
+            style="position:absolute;right:6px;top:50%;transform:translateY(-50%);">${_ICON_CLIP}</button>
         </div>
       </div>
 
@@ -575,8 +573,7 @@ function renderDraftDetail(d, container) {
         <div style="position:relative;">
           <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow:hidden;padding-right:32px;">${esc(d.body || '')}</textarea>
           <button class="field-copy-btn" id="dbcopy-${d.id}" title="Copy body"
-            style="position:absolute;right:6px;top:7px;"
-            onclick="copyField('dbody-${d.id}','dbcopy-${d.id}')">${_ICON_CLIP}</button>
+            style="position:absolute;right:6px;top:7px;">${_ICON_CLIP}</button>
         </div>
       </div>
 
@@ -609,11 +606,41 @@ function renderDraftDetail(d, container) {
       <div id="dapproved-${d.id}"></div>
     </div>
   `;
-  const bodyTa = document.getElementById(`dbody-${d.id}`);
-  if (bodyTa) {
-    autoExpandTa(bodyTa);
-    bodyTa.addEventListener('input', () => autoExpandTa(bodyTa));
+  const draftId = d.id;
+  const subjectEl  = document.getElementById('dsubject-' + draftId);
+  const bodyEl     = document.getElementById('dbody-'    + draftId);
+  const scopyBtn   = document.getElementById('dscopy-'   + draftId);
+  const bcopyBtn   = document.getElementById('dbcopy-'   + draftId);
+  const efcopyBtn  = document.getElementById('defcopy-'  + draftId);
+
+  if (bodyEl) {
+    autoExpandTa(bodyEl);
+    bodyEl.addEventListener('input', () => autoExpandTa(bodyEl));
   }
+
+  function _flash(btn) {
+    btn.innerHTML = _ICON_CHECK;
+    setTimeout(() => { btn.innerHTML = _ICON_CLIP; }, 1500);
+  }
+  function _copy(text, btn) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => _flash(btn)).catch(() => fallbackCopy(text, () => _flash(btn)));
+    } else {
+      fallbackCopy(text, () => _flash(btn));
+    }
+  }
+
+  if (scopyBtn) scopyBtn.onclick = function() {
+    _copy((subjectEl || {}).value || '', scopyBtn);
+  };
+  if (bcopyBtn) bcopyBtn.onclick = function() {
+    _copy((bodyEl || {}).value || '', bcopyBtn);
+  };
+  if (efcopyBtn) efcopyBtn.onclick = function() {
+    var sub = (subjectEl || {}).value || '';
+    var bod = (bodyEl    || {}).value || '';
+    _copy('Subject: ' + sub + '\n\n' + bod, efcopyBtn);
+  };
 }
 
 function autoExpandTa(ta) {
