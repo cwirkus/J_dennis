@@ -78,6 +78,8 @@
     .btn-ghost:hover:not(:disabled) { border-color: #383838; color: #888; }
     .btn-primary { background: #1e1e1e; border: 1px solid #333; color: #ccc; }
     .btn-primary:hover:not(:disabled) { background: #252525; border-color: #444; }
+    .field-copy-btn { background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 4px; padding: 4px 5px; cursor: pointer; color: #666; display: inline-flex; align-items: center; justify-content: center; line-height: 0; flex-shrink: 0; }
+    .field-copy-btn:hover { background: #252525; border-color: #383838; color: #aaa; }
 
     /* Priority badges */
     .badge-p1 { font-size: 9px; padding: 1px 6px; border-radius: 2px; background: #3a2900; color: #c9920a; letter-spacing: 0.06em; }
@@ -473,14 +475,31 @@ async function runBatch() {
   }
 }
 
+const _ICON_CLIP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M17 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>`;
+const _ICON_CHECK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6fcf97" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+function copyField(inputId, btnId) {
+  const el = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (!el || !btn) return;
+
+  function onCopied() {
+    btn.innerHTML = _ICON_CHECK;
+    setTimeout(() => { btn.innerHTML = _ICON_CLIP; }, 1500);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(el.value || '').then(onCopied).catch(() => fallbackCopy(el.value || '', onCopied));
+  } else {
+    fallbackCopy(el.value || '', onCopied);
+  }
+}
+
 function copyDraftEmail(id) {
   const subject = (document.getElementById(`dsubject-${id}`) || {}).value || '';
   const body = (document.getElementById(`dbody-${id}`) || {}).value || '';
   const text = `Subject: ${subject}\n\n${body}`;
-  const btns = [
-    document.getElementById(`dcopy-${id}`),
-    document.getElementById(`dcopy-top-${id}`),
-  ].filter(Boolean);
+  const btns = [document.getElementById(`dcopy-${id}`)].filter(Boolean);
 
   function onCopied() {
     btns.forEach(b => {
@@ -512,22 +531,25 @@ function renderDraftDetail(d, container) {
   container.innerHTML = `
 
     <div style="max-width:680px;">
-      <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-weight:600;font-size:16px;">${esc(d.prospect_name || '—')}</div>
-          <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
-          <div style="color:#444;font-size:11px;margin-top:3px;font-family:monospace;">${esc(d.email || '')}</div>
-        </div>
-        <button class="btn btn-primary" id="dcopy-top-${d.id}" onclick="copyDraftEmail('${d.id}')" style="flex-shrink:0;margin-left:16px;">Copy Email</button>
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:600;font-size:16px;">${esc(d.prospect_name || '—')}</div>
+        <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
+        <div style="color:#444;font-size:11px;margin-top:3px;font-family:monospace;">${esc(d.email || '')}</div>
       </div>
 
       <div style="margin-bottom:10px;">
-        <div class="field-label">Subject</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="field-label" style="margin-bottom:0;">Subject</div>
+          <button class="field-copy-btn" id="dscopy-${d.id}" title="Copy" onclick="copyField('dsubject-${d.id}','dscopy-${d.id}')">${_ICON_CLIP}</button>
+        </div>
         <input id="dsubject-${d.id}" class="ifield" type="text" value="${escAttr(d.subject || '')}" />
       </div>
 
       <div style="margin-bottom:${hasNotes ? '10px' : '14px'};">
-        <div class="field-label">Body</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div class="field-label" style="margin-bottom:0;">Body</div>
+          <button class="field-copy-btn" id="dbcopy-${d.id}" title="Copy" onclick="copyField('dbody-${d.id}','dbcopy-${d.id}')">${_ICON_CLIP}</button>
+        </div>
         <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow:hidden;">${esc(d.body || '')}</textarea>
       </div>
 
