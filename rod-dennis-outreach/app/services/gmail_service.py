@@ -1,59 +1,29 @@
-import base64
-import json
-import tempfile
+import smtplib
+import ssl
+import logging
 from email.mime.text import MIMEText
-
-from googleapiclient.discovery import build
-
+from email.mime.multipart import MIMEMultipart
 from app.config import settings
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+logger = logging.getLogger(__name__)
 
 
-def authenticate():
-    raw = settings.gmail_credentials_json
-    if not raw:
-        raise ValueError("GMAIL_CREDENTIALS_JSON is not set")
-
-    info = json.loads(raw)
-    cred_type = info.get("type", "")
-
-    if cred_type == "service_account":
-        from google.oauth2.service_account import Credentials
-        creds = Credentials.from_service_account_info(
-            info,
-            scopes=SCOPES,
-            subject=settings.rod_email,
-        )
-    else:
-        from google.oauth2.credentials import Credentials
-        creds = Credentials(
-            token=info.get("token"),
-            refresh_token=info.get("refresh_token"),
-            token_uri=info.get("token_uri", "https://oauth2.googleapis.com/token"),
-            client_id=info.get("client_id"),
-            client_secret=info.get("client_secret"),
-            scopes=SCOPES,
-        )
-
-    return build("gmail", "v1", credentials=creds)
-
-
-def send_email(to: str, subject: str, body: str) -> str | None:
+def send_email(to: str, subject: str, body: str, from_email: str = None) -> str | None:
+    sender = from_email or settings.smtp_username
     try:
-        service = authenticate()
-        msg = MIMEText(body, "plain")
+        msg = MIMEMultipart()
+        msg["From"] = sender
         msg["To"] = to
-        msg["From"] = settings.rod_email
         msg["Subject"] = subject
-        raw_bytes = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        result = (
-            service.users()
-            .messages()
-            .send(userId="me", body={"raw": raw_bytes})
-            .execute()
-        )
-        return result.get("id")
-    except Exception as exc:
-        print(f"[gmail_service] send_email failed: {exc}")
+        msg.attach(MIMEText(body, "plain"))
+        context = ssl.create_default_context()
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.login(settings.smtp_username, settings.smtp_password)
+            server.sendmail(sender, to, msg.as_string())
+            logger.info(f"[gmail_service] email sent to={to} subject={subject}")
+            return "sent"
+    except Exception as e:
+        logger.error(f"[gmail_service] send_email failed: {e}")
         return None
