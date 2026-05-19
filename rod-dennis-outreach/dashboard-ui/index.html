@@ -495,6 +495,25 @@ function copyField(inputId, btnId) {
   }
 }
 
+function copyFullEmail(id, btnId) {
+  const subject = (document.getElementById(`dsubject-${id}`) || {}).value || '';
+  const body = (document.getElementById(`dbody-${id}`) || {}).value || '';
+  const text = `Subject: ${subject}\n\n${body}`;
+  const btn = document.getElementById(btnId);
+
+  function onCopied() {
+    if (!btn) return;
+    btn.innerHTML = _ICON_CHECK;
+    setTimeout(() => { btn.innerHTML = _ICON_CLIP; }, 1500);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(() => fallbackCopy(text, onCopied));
+  } else {
+    fallbackCopy(text, onCopied);
+  }
+}
+
 function copyDraftEmail(id) {
   const subject = (document.getElementById(`dsubject-${id}`) || {}).value || '';
   const body = (document.getElementById(`dbody-${id}`) || {}).value || '';
@@ -538,19 +557,26 @@ function renderDraftDetail(d, container) {
       </div>
 
       <div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <div class="field-label" style="margin-bottom:0;">Subject</div>
-          <button class="field-copy-btn" id="dscopy-${d.id}" title="Copy" onclick="copyField('dsubject-${d.id}','dscopy-${d.id}')">${_ICON_CLIP}</button>
+        <div class="field-label">Subject</div>
+        <div style="position:relative;">
+          <input id="dsubject-${d.id}" class="ifield" type="text" value="${escAttr(d.subject || '')}" style="padding-right:32px;" />
+          <button class="field-copy-btn" id="dscopy-${d.id}" title="Copy subject"
+            style="position:absolute;right:6px;top:50%;transform:translateY(-50%);"
+            onclick="copyField('dsubject-${d.id}','dscopy-${d.id}')">${_ICON_CLIP}</button>
         </div>
-        <input id="dsubject-${d.id}" class="ifield" type="text" value="${escAttr(d.subject || '')}" />
       </div>
 
       <div style="margin-bottom:${hasNotes ? '10px' : '14px'};">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <div class="field-label" style="margin-bottom:0;">Body</div>
-          <button class="field-copy-btn" id="dbcopy-${d.id}" title="Copy" onclick="copyField('dbody-${d.id}','dbcopy-${d.id}')">${_ICON_CLIP}</button>
+        <div class="field-label">Body</div>
+        <div style="position:relative;">
+          <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow:hidden;padding-right:32px;">${esc(d.body || '')}</textarea>
+          <button class="field-copy-btn" id="dbcopy-${d.id}" title="Copy body"
+            style="position:absolute;right:6px;top:7px;"
+            onclick="copyField('dbody-${d.id}','dbcopy-${d.id}')">${_ICON_CLIP}</button>
+          <button class="field-copy-btn" id="defcopy-${d.id}" title="Copy full email"
+            style="position:absolute;right:6px;bottom:8px;"
+            onclick="copyFullEmail('${d.id}','defcopy-${d.id}')">${_ICON_CLIP}</button>
         </div>
-        <textarea id="dbody-${d.id}" class="ifield" style="min-height:300px;overflow:hidden;">${esc(d.body || '')}</textarea>
       </div>
 
       ${hasNotes ? `
