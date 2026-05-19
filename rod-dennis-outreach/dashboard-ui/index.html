@@ -479,9 +479,9 @@ const _ICON_CLIP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" 
 const _ICON_CHECK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6fcf97" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
 function copyField(inputId, btnId) {
-  const el = document.getElementById(inputId);
+  const text = (document.getElementById(inputId) || {}).value || '';
   const btn = document.getElementById(btnId);
-  if (!el || !btn) return;
+  if (!btn) return;
 
   function onCopied() {
     btn.innerHTML = _ICON_CHECK;
@@ -489,9 +489,9 @@ function copyField(inputId, btnId) {
   }
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(el.value || '').then(onCopied).catch(() => fallbackCopy(el.value || '', onCopied));
+    navigator.clipboard.writeText(text).then(onCopied).catch(() => fallbackCopy(text, onCopied));
   } else {
-    fallbackCopy(el.value || '', onCopied);
+    fallbackCopy(text, onCopied);
   }
 }
 
