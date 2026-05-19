@@ -477,12 +477,16 @@ function copyDraftEmail(id) {
   const subject = (document.getElementById(`dsubject-${id}`) || {}).value || '';
   const body = (document.getElementById(`dbody-${id}`) || {}).value || '';
   const text = `Subject: ${subject}\n\n${body}`;
-  const btn = document.getElementById(`dcopy-${id}`);
+  const btns = [
+    document.getElementById(`dcopy-${id}`),
+    document.getElementById(`dcopy-top-${id}`),
+  ].filter(Boolean);
 
   function onCopied() {
-    if (!btn) return;
-    btn.textContent = '✓ Copied';
-    setTimeout(() => { btn.textContent = 'Copy Email'; }, 2000);
+    btns.forEach(b => {
+      b.textContent = '✓ Copied';
+      setTimeout(() => { b.textContent = 'Copy Email'; }, 2000);
+    });
   }
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -508,10 +512,13 @@ function renderDraftDetail(d, container) {
   container.innerHTML = `
 
     <div style="max-width:680px;">
-      <div style="margin-bottom:16px;">
-        <div style="font-weight:600;font-size:16px;">${esc(d.prospect_name || '—')}</div>
-        <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
-        <div style="color:#444;font-size:11px;margin-top:3px;font-family:monospace;">${esc(d.email || '')}</div>
+      <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-weight:600;font-size:16px;">${esc(d.prospect_name || '—')}</div>
+          <div style="color:#555;font-size:12px;margin-top:2px;">${esc(d.organization || '')} ${d.country ? `· ${countryFlag(d.country)} ${esc(d.country)}` : ''}</div>
+          <div style="color:#444;font-size:11px;margin-top:3px;font-family:monospace;">${esc(d.email || '')}</div>
+        </div>
+        <button class="btn btn-primary" id="dcopy-top-${d.id}" onclick="copyDraftEmail('${d.id}')" style="flex-shrink:0;margin-left:16px;">Copy Email</button>
       </div>
 
       <div style="margin-bottom:10px;">
