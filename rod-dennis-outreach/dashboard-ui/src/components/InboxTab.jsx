@@ -6,6 +6,8 @@ function InboxTab() {
   const [highPriorityIds, setHighPriorityIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [edits, setEdits] = useState({});
+  const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -16,7 +18,6 @@ function InboxTab() {
       ]);
       const hpIds = new Set((hp || []).map(m => m.id));
       setHighPriorityIds(hpIds);
-      // Merge: HP first, then remaining pending, deduplicated
       const seen = new Set();
       const merged = [...(hp || []), ...(pending || [])].filter(m => {
         if (seen.has(m.id)) return false;
@@ -32,13 +33,27 @@ function InboxTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  async function checkNow() {
+    setChecking(true);
+    setCheckResult(null);
+    try {
+      const res = await apiFetch('/api/v1/inbox/check-now', { method: 'POST' });
+      setCheckResult(res);
+      await load();
+    } catch (e) {
+      setCheckResult({ error: e.message });
+    }
+    setChecking(false);
+  }
+
   async function approveSend(msgId) {
     try {
       const res = await apiFetch(`/api/v1/chat/${msgId}/approve-response`, { method: 'POST' });
       if (res.sent) {
         setMessages(prev => prev.filter(m => m.id !== msgId));
       } else {
-        alert('Send failed: ' + (res.error || 'unknown error'));
+        alert('SMTP not configured — reply marked approved but not sent. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD in .env');
+        setMessages(prev => prev.filter(m => m.id !== msgId));
       }
     } catch (e) { alert('Error: ' + e.message); }
   }
@@ -63,13 +78,55 @@ function InboxTab() {
     } catch { return iso; }
   }
 
+  const blockStyle = {
+    padding: '10px 14px',
+    background: '#111',
+    border: '1px solid #1f1f1f',
+    borderRadius: 5,
+    fontSize: 13,
+    color: '#bbb',
+    lineHeight: 1.65,
+    marginBottom: 14,
+    whiteSpace: 'pre-wrap',
+  };
+
+  const labelStyle = {
+    fontSize: 10,
+    letterSpacing: '0.1em',
+    color: '#555',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  };
+
   if (loading) return <div style={S.emptyState}>Loading…</div>;
-  if (!messages.length) return <div style={S.emptyState}>No pending messages.</div>;
 
   return (
     <div>
+      {/* Check inbox bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <button
+          onClick={checkNow}
+          disabled={checking}
+          style={{ ...S.btnAmber, opacity: checking ? 0.6 : 1, minWidth: 140 }}
+        >
+          {checking ? 'Checking…' : 'Check Inbox Now'}
+        </button>
+        {checkResult && !checkResult.error && (
+          <span style={{ fontSize: 12, color: '#888' }}>
+            {checkResult.new_replies} new {checkResult.new_replies === 1 ? 'reply' : 'replies'},
+            &nbsp;{checkResult.matched} matched to prospects
+          </span>
+        )}
+        {checkResult?.error && (
+          <span style={{ fontSize: 12, color: '#c0392b' }}>{checkResult.error}</span>
+        )}
+      </div>
+
+      {!messages.length && <div style={S.emptyState}>No pending messages.</div>}
+
       {messages.map(msg => {
         const isHP = highPriorityIds.has(msg.id);
+        const isEmailReply = msg.channel === 'email' && msg.prospect_org;
         const draftText = edits[msg.id] ?? (msg.draft_response || '');
 
         return (
@@ -83,7 +140,12 @@ function InboxTab() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
               <div>
                 <span style={{ fontWeight: 600, fontSize: 15 }}>{msg.sender_name || '—'}</span>
-                <span style={{ color: '#888', marginLeft: 8, fontSize: 13 }}>{msg.sender_email}</span>
+                {isEmailReply && (
+                  <span style={{ color: '#888', fontSize: 13, marginLeft: 6 }}>
+                    · {msg.prospect_org}
+                  </span>
+                )}
+                <span style={{ color: '#666', marginLeft: 8, fontSize: 12 }}>{msg.sender_email}</span>
                 {msg.channel && (
                   <span style={{
                     marginLeft: 10,
@@ -117,20 +179,21 @@ function InboxTab() {
               </div>
             </div>
 
-            {/* Their message */}
-            <div style={{
-              padding: '10px 14px',
-              background: '#111',
-              border: '1px solid #1f1f1f',
-              borderRadius: 5,
-              fontSize: 13,
-              color: '#bbb',
-              lineHeight: 1.65,
-              marginBottom: 14,
-              whiteSpace: 'pre-wrap',
-            }}>
-              {msg.message}
-            </div>
+            {/* Thread context for matched email replies */}
+            {isEmailReply && msg.original_body && (
+              <>
+                <div style={labelStyle}>
+                  ORIGINAL EMAIL — {msg.original_subject || 'Outreach'}
+                </div>
+                <div style={{ ...blockStyle, color: '#666', borderStyle: 'dashed' }}>
+                  {msg.original_body}
+                </div>
+              </>
+            )}
+
+            {/* Their reply */}
+            <div style={labelStyle}>{isEmailReply ? 'THEIR REPLY' : 'MESSAGE'}</div>
+            <div style={blockStyle}>{msg.message}</div>
 
             {/* Draft response */}
             <div style={S.fieldLabel}>DRAFT RESPONSE</div>

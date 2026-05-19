@@ -156,6 +156,7 @@ def update_draft(draft_id: str, updates: dict) -> bool:
 INBOUND_COLUMNS = [
     "id", "sender_name", "sender_email", "channel", "message",
     "draft_response", "status", "sent_at", "created_at", "high_priority",
+    "prospect_org", "original_subject", "original_body",
 ]
 
 

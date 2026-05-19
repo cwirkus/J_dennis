@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     discovery_log_path: str = "data/discovery_log.csv"
     social_drafts_path: str = "data/social_drafts.csv"
     dashboard_url: str = "http://localhost:3000"
+    imap_host: str = ""
+    imap_port: int = 993
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
 
     class Config:
         env_file = ".env"

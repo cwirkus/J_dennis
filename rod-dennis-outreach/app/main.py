@@ -12,7 +12,8 @@ from app.routers import dashboard, prospects
 from app.routers import discovery as discovery_router
 from app.routers import social as social_router
 from app.routers import chat as chat_router
-from app.services import csv_service, discovery_agent, social_generator, tracking_service
+from app.routers import inbox as inbox_router
+from app.services import csv_service, discovery_agent, social_generator, tracking_service, inbox_monitor
 
 scheduler = AsyncIOScheduler()
 
@@ -64,6 +65,13 @@ async def lifespan(app: FastAPI):
         id="daily_priority_nudge",
         replace_existing=True,
     )
+    scheduler.add_job(
+        inbox_monitor.check_inbox,
+        trigger="interval",
+        minutes=30,
+        id="inbox_monitor",
+        replace_existing=True,
+    )
     scheduler.start()
 
     yield
@@ -85,6 +93,7 @@ app.include_router(dashboard.router)
 app.include_router(discovery_router.router)
 app.include_router(social_router.router)
 app.include_router(chat_router.router)
+app.include_router(inbox_router.router)
 
 if os.path.isdir("dashboard-ui"):
     app.mount("/dashboard", StaticFiles(directory="dashboard-ui", html=True), name="dashboard")

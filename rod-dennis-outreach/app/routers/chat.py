@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services import chat_service, csv_service
+from app.services import chat_service, csv_service, inbox_monitor
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
@@ -79,6 +79,14 @@ def approve_response(message_id: str):
     msg = csv_service.get_inbound_by_id(message_id)
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
+
+    draft_text = msg.get("draft_response", "")
+    to_email = msg["sender_email"]
+    original_subject = msg.get("original_subject", "")
+    reply_subject = f"Re: {original_subject}" if original_subject else "Re: Your inquiry"
+
+    sent = inbox_monitor.send_reply(to_email, reply_subject, draft_text)
+
     csv_service.update_inbound(
         message_id,
         {
@@ -86,11 +94,11 @@ def approve_response(message_id: str):
             "sent_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    # Rod copies this text and sends from Gmail himself — nothing sends automatically
     return {
         "success": True,
-        "sender_email": msg["sender_email"],
-        "draft_response": msg.get("draft_response", ""),
+        "sent": sent,
+        "sender_email": to_email,
+        "draft_response": draft_text,
     }
 
 
