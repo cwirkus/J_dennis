@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     imap_host: str = ""
     imap_port: int = 993
     smtp_host: str = ""
-    smtp_port: int = 587
+    smtp_port: int = 465
     smtp_username: str = ""
     smtp_password: str = ""
 
