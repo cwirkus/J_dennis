@@ -18,6 +18,7 @@ Art foundations that fund or collect this type of work
 Corporate collections with African American art programs
 Private collectors known to collect figurative realism or African American art
 International institutions with diaspora art programs
+Auction houses with dedicated African American art sales or figurative realist consignment programs — specifically specialists at Swann Galleries, Doyle New York, Heritage Auctions, Christie's, Sotheby's, and Bonhams
 
 For each prospect return these exact fields:
 name, organization, category, country, email, phone, website, priority (1 or 2), notes (why they are relevant to Rod specifically)
