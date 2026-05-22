@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from app.services import csv_service, discovery_agent
+from app.database import get_db
+from app.services import discovery_agent
 
 router = APIRouter(prefix="/api/v1/discovery", tags=["discovery"])
 
@@ -12,4 +13,11 @@ async def run_now():
 
 @router.get("/log")
 def get_log():
-    return csv_service.get_discovery_log()
+    return (
+        get_db().table("discovery_log")
+        .select("*")
+        .order("run_at", desc=True)
+        .limit(20)
+        .execute()
+        .data or []
+    )

@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services import csv_service, social_generator
+from app.database import get_db
+from app.services import social_generator
 
 router = APIRouter(prefix="/api/v1/social", tags=["social"])
 
@@ -25,65 +26,69 @@ async def generate(req: GenerateRequest):
         context=req.context,
         platforms=req.platforms,
     )
-
+    db = get_db()
     drafts = []
     for platform, content in result.items():
-        draft = csv_service.append_social_draft(
-            {
-                "platform": platform,
-                "content": content,
-                "trigger_event": req.trigger_event,
-                "status": "pending",
-            }
-        )
-        drafts.append(draft)
-
+        row = db.table("social_drafts").insert({
+            "platform": platform,
+            "content": content,
+            "trigger_event": req.trigger_event,
+            "status": "pending",
+        }).execute().data
+        if row:
+            drafts.append(row[0])
     return {"drafts": drafts}
 
 
 @router.get("/pending")
 def get_pending():
-    rows = csv_service.get_social_drafts_by_status("pending")
-    rows.sort(key=lambda r: r.get("created_at", ""), reverse=True)
-    return rows
+    return (
+        get_db().table("social_drafts")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .execute()
+        .data or []
+    )
 
 
 @router.patch("/{draft_id}/approve")
 def approve(draft_id: str):
-    draft = csv_service.get_social_draft_by_id(draft_id)
-    if not draft:
+    db = get_db()
+    rows = db.table("social_drafts").select("*").eq("id", draft_id).execute().data or []
+    if not rows:
         raise HTTPException(status_code=404, detail="Draft not found")
-    csv_service.update_social_draft(
-        draft_id,
-        {
-            "status": "approved",
-            "approved_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
-    # Rod copies this text and posts himself — nothing posts automatically
+    draft = rows[0]
+    db.table("social_drafts").update({
+        "status": "approved",
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", draft_id).execute()
     return {"success": True, "platform": draft["platform"], "content": draft["content"]}
 
 
 @router.patch("/{draft_id}/edit")
 def edit(draft_id: str, req: EditRequest):
-    updated = csv_service.update_social_draft(draft_id, {"content": req.content})
-    if not updated:
+    db = get_db()
+    if not db.table("social_drafts").select("id").eq("id", draft_id).execute().data:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return csv_service.get_social_draft_by_id(draft_id)
+    db.table("social_drafts").update({"content": req.content}).eq("id", draft_id).execute()
+    rows = db.table("social_drafts").select("*").eq("id", draft_id).execute().data or []
+    return rows[0] if rows else {}
 
 
 @router.patch("/{draft_id}/unapprove")
 def unapprove(draft_id: str):
-    draft = csv_service.get_social_draft_by_id(draft_id)
-    if not draft:
+    db = get_db()
+    if not db.table("social_drafts").select("id").eq("id", draft_id).execute().data:
         raise HTTPException(status_code=404, detail="Draft not found")
-    csv_service.update_social_draft(draft_id, {"status": "pending", "approved_at": ""})
+    db.table("social_drafts").update({"status": "pending", "approved_at": None}).eq("id", draft_id).execute()
     return {"success": True}
 
 
 @router.delete("/{draft_id}")
 def delete(draft_id: str):
-    deleted = csv_service.delete_social_draft(draft_id)
-    if not deleted:
+    db = get_db()
+    if not db.table("social_drafts").select("id").eq("id", draft_id).execute().data:
         raise HTTPException(status_code=404, detail="Draft not found")
+    db.table("social_drafts").delete().eq("id", draft_id).execute()
     return {"success": True}

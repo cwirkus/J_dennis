@@ -9,7 +9,8 @@ from email.mime.text import MIMEText
 from email.utils import parseaddr
 
 from app.config import settings
-from app.services import chat_service, csv_service
+from app.database import get_db
+from app.services import chat_service
 
 
 def _decode_header_value(value: str) -> str:
@@ -33,12 +34,11 @@ def _extract_body(msg: email.message.Message) -> str:
             if ctype == "text/plain" and "attachment" not in disp:
                 charset = part.get_content_charset() or "utf-8"
                 return part.get_payload(decode=True).decode(charset, errors="replace")
-        # Fallback to html part
         for part in msg.walk():
             if part.get_content_type() == "text/html":
+                import re
                 charset = part.get_content_charset() or "utf-8"
                 html = part.get_payload(decode=True).decode(charset, errors="replace")
-                import re
                 return re.sub(r"<[^>]+>", "", html).strip()
     else:
         charset = msg.get_content_charset() or "utf-8"
@@ -46,27 +46,27 @@ def _extract_body(msg: email.message.Message) -> str:
     return ""
 
 
-def _find_sent_draft(prospect_email: str) -> dict | None:
-    """Return the most recent sent outreach draft for this prospect email."""
-    drafts = [
-        d for d in csv_service.get_all_drafts()
-        if d.get("prospect_email", "").lower() == prospect_email.lower()
-        and d.get("status") == "sent"
-    ]
-    if not drafts:
-        return None
-    return sorted(drafts, key=lambda d: d.get("sent_at", ""), reverse=True)[0]
+def _find_prospect_by_email(sender_email: str) -> dict | None:
+    rows = get_db().table("prospects").select("*").eq("email", sender_email).execute().data or []
+    return rows[0] if rows else None
 
 
-def _mark_drafts_replied(prospect_email: str) -> None:
-    drafts = [
-        d for d in csv_service.get_all_drafts()
-        if d.get("prospect_email", "").lower() == prospect_email.lower()
-        and d.get("status") == "sent"
-        and d.get("replied") != "true"
-    ]
-    for d in drafts:
-        csv_service.update_draft(d["id"], {"replied": "true"})
+def _find_sent_draft(prospect_id: str) -> dict | None:
+    rows = (
+        get_db().table("outreach_drafts")
+        .select("subject,body")
+        .eq("prospect_id", prospect_id)
+        .eq("status", "sent")
+        .order("sent_at", desc=True)
+        .limit(1)
+        .execute()
+        .data or []
+    )
+    return rows[0] if rows else None
+
+
+def _mark_drafts_replied(prospect_id: str) -> None:
+    get_db().table("outreach_drafts").update({"replied": True}).eq("prospect_id", prospect_id).eq("status", "sent").execute()
 
 
 def _check_inbox_sync() -> dict:
@@ -94,9 +94,7 @@ def _check_inbox_sync() -> dict:
             if not raw_data or raw_data[0] is None:
                 continue
 
-            raw_email = raw_data[0][1]
-            msg = email.message_from_bytes(raw_email)
-
+            msg = email.message_from_bytes(raw_data[0][1])
             from_raw = msg.get("From", "")
             sender_name, sender_email = parseaddr(from_raw)
             sender_name = _decode_header_value(sender_name) or sender_name
@@ -108,55 +106,57 @@ def _check_inbox_sync() -> dict:
                 imap.store(mid, "+FLAGS", "\\Seen")
                 continue
 
-            prospect = csv_service.find_by_email(sender_email)
+            prospect = _find_prospect_by_email(sender_email)
             new_replies += 1
+            db = get_db()
 
             if prospect:
                 matched += 1
                 now = datetime.now(timezone.utc).isoformat()
 
-                csv_service.update_prospect(
-                    sender_email,
-                    {"status": "Response", "last_activity": now},
-                )
-                _mark_drafts_replied(sender_email)
+                db.table("prospects").update({
+                    "status": "Response",
+                    "last_activity": now,
+                }).eq("email", sender_email).execute()
 
-                sent_draft = _find_sent_draft(sender_email)
+                _mark_drafts_replied(prospect["id"])
+
+                sent_draft = _find_sent_draft(prospect["id"])
                 original_subject = sent_draft.get("subject", "") if sent_draft else ""
                 original_body = sent_draft.get("body", "") if sent_draft else ""
 
-                saved = csv_service.append_inbound({
+                result = db.table("inbound_messages").insert({
                     "sender_name": prospect.get("name") or sender_name,
                     "sender_email": sender_email,
                     "channel": "email",
                     "message": body,
                     "status": "pending",
-                    "high_priority": str(chat_service.is_high_priority(
-                        sender_email, sender_name, body
-                    )),
+                    "high_priority": chat_service.is_high_priority(sender_email, sender_name, body),
                     "prospect_org": prospect.get("organization", ""),
                     "original_subject": original_subject,
                     "original_body": original_body,
-                })
+                }).execute()
+                saved = result.data[0] if result.data else {}
 
-                draft_text = asyncio.get_event_loop().run_until_complete(
-                    chat_service.draft_response(
-                        saved["sender_name"], sender_email, "email", body
+                if saved.get("id"):
+                    draft_text = asyncio.get_event_loop().run_until_complete(
+                        chat_service.draft_response(
+                            saved.get("sender_name", sender_name), sender_email, "email", body
+                        )
                     )
-                )
-                csv_service.update_inbound(saved["id"], {"draft_response": draft_text})
+                    db.table("inbound_messages").update({"draft_response": draft_text}).eq("id", saved["id"]).execute()
             else:
-                csv_service.append_inbound({
+                db.table("inbound_messages").insert({
                     "sender_name": sender_name,
                     "sender_email": sender_email,
                     "channel": "email",
                     "message": body,
                     "status": "pending",
-                    "high_priority": "False",
-                    "prospect_org": "",
+                    "high_priority": False,
+                    "prospect_org": None,
                     "original_subject": subject,
-                    "original_body": "",
-                })
+                    "original_body": None,
+                }).execute()
 
             imap.store(mid, "+FLAGS", "\\Seen")
 

@@ -8,12 +8,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.database import get_db
 from app.routers import dashboard, prospects
 from app.routers import discovery as discovery_router
 from app.routers import social as social_router
 from app.routers import chat as chat_router
 from app.routers import inbox as inbox_router
-from app.services import csv_service, discovery_agent, social_generator, tracking_service, inbox_monitor
+from app.services import discovery_agent, social_generator, tracking_service, inbox_monitor
 
 scheduler = AsyncIOScheduler()
 
@@ -23,24 +24,20 @@ async def _weekly_social_job() -> None:
     context = "classical realism and African American figurative art market"
 
     result = await social_generator.generate_social_content(trigger, context)
+    db = get_db()
     for platform, content in result.items():
-        csv_service.append_social_draft(
-            {"platform": platform, "content": content, "trigger_event": trigger, "status": "pending"}
-        )
+        db.table("social_drafts").insert({
+            "platform": platform,
+            "content": content,
+            "trigger_event": trigger,
+            "status": "pending",
+        }).execute()
 
-    saved = list(result.keys())
-    print(f"[weekly_social] saved={saved or 'none'}")
+    print(f"[weekly_social] saved={list(result.keys()) or 'none'}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    os.makedirs("data", exist_ok=True)
-    csv_service.ensure_csv_exists()
-    csv_service.ensure_drafts_csv_exists()
-    csv_service.ensure_inbound_csv_exists()
-    csv_service.ensure_discovery_log_exists()
-    csv_service.ensure_social_drafts_exists()
-
     scheduler.add_job(
         discovery_agent.run_discovery,
         trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
